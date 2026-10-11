@@ -1,14 +1,415 @@
-/* ============ CONFIG ============ */
-const BASE_URL = "https://am.kyzzz.xyz";
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Am Prem — Alight Motion Premium Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#050507;--bg-2:#0b0b12;--panel:rgba(255,255,255,0.03);
+    --border:rgba(255,255,255,0.08);--text:#e8e8ef;--muted:#8b8b9c;
+    --accent:#7c5cff;--accent-2:#00e5ff;--accent-3:#ff3d8b;
+    --ok:#22c55e;--err:#ef4444;--radius:16px;
+    --shadow:0 20px 60px -20px rgba(124,92,255,0.35);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);
+    min-height:100vh;overflow-x:hidden;line-height:1.55;-webkit-font-smoothing:antialiased;position:relative}
+  body::before{content:"";position:fixed;inset:0;
+    background:radial-gradient(700px 500px at 15% 10%, rgba(124,92,255,0.22), transparent 60%),
+      radial-gradient(700px 500px at 85% 15%, rgba(0,229,255,0.14), transparent 60%),
+      radial-gradient(900px 700px at 50% 110%, rgba(255,61,139,0.14), transparent 60%);
+    z-index:-2;animation:aurora 18s ease-in-out infinite alternate}
+  body::after{content:"";position:fixed;inset:0;
+    background-image:linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size:52px 52px;
+    mask-image:radial-gradient(circle at center, black 30%, transparent 85%);
+    z-index:-1;pointer-events:none}
+  @keyframes aurora{0%{filter:hue-rotate(0deg) saturate(1)}100%{filter:hue-rotate(35deg) saturate(1.2)}}
+  .wrap{max-width:1100px;margin:0 auto;padding:28px 20px 80px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;
+    padding:14px 18px;margin-bottom:36px;border:1px solid var(--border);border-radius:14px;
+    background:rgba(12,12,20,0.6);backdrop-filter:blur(14px);position:sticky;top:14px;z-index:50}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{width:38px;height:38px;border-radius:11px;
+    background:conic-gradient(from 200deg,var(--accent),var(--accent-2),var(--accent-3),var(--accent));
+    display:grid;place-items:center;font-weight:900;font-size:15px;color:#fff;
+    box-shadow:0 0 24px rgba(124,92,255,0.55);animation:spin 8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .brand-txt b{font-size:15px;letter-spacing:.3px}
+  .brand-txt span{display:block;font-size:11px;color:var(--muted);letter-spacing:1.4px;text-transform:uppercase}
+  .status-pill{display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;
+    border:1px solid rgba(34,197,94,0.3);background:rgba(34,197,94,0.08);
+    font-size:12px;font-weight:600;color:#86efac;font-family:'JetBrains Mono',monospace}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);
+    box-shadow:0 0 10px var(--ok);animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .hero{text-align:center;margin-bottom:46px}
+  .badge{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;
+    border:1px solid var(--border);background:var(--panel);font-size:12px;color:var(--muted);
+    font-family:'JetBrains Mono',monospace;margin-bottom:22px}
+  .badge em{color:var(--accent-2);font-style:normal}
+  h1{font-size:clamp(34px,6.5vw,66px);font-weight:900;line-height:1.02;letter-spacing:-1.5px;margin-bottom:20px}
+  h1 .g{background:linear-gradient(120deg,#fff 10%,var(--accent) 45%,var(--accent-2) 75%,var(--accent-3));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{max-width:640px;margin:0 auto;color:var(--muted);font-size:16px}
+  .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:52px 0}
+  .feat{border:1px solid var(--border);border-radius:var(--radius);padding:24px;
+    background:var(--panel);transition:.3s;position:relative;overflow:hidden}
+  .feat:hover{border-color:rgba(124,92,255,0.5);transform:translateY(-3px);background:rgba(124,92,255,0.05)}
+  .feat-icon{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:20px;
+    background:linear-gradient(135deg, rgba(124,92,255,0.25), rgba(0,229,255,0.15));
+    border:1px solid rgba(124,92,255,0.3);margin-bottom:16px}
+  .feat h3{font-size:17px;font-weight:700;margin-bottom:8px}
+  .feat p{font-size:14px;color:var(--muted)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:36px 0}
+  .stat{border:1px solid var(--border);border-radius:var(--radius);padding:22px;
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);text-align:center}
+  .stat .lbl{font-size:11px;color:var(--muted);letter-spacing:1.6px;text-transform:uppercase;margin-bottom:10px}
+  .stat .val{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;
+    background:linear-gradient(120deg,#fff,var(--accent-2));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .marquee{overflow:hidden;margin:26px 0 44px;border-top:1px solid var(--border);
+    border-bottom:1px solid var(--border);padding:14px 0;
+    mask-image:linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent)}
+  .marquee-track{display:flex;gap:44px;width:max-content;animation:scroll 26s linear infinite}
+  .marquee-track span{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);
+    letter-spacing:2px;white-space:nowrap;display:flex;align-items:center;gap:44px}
+  .marquee-track span::after{content:"◆";color:var(--accent);margin-left:44px}
+  @keyframes scroll{to{transform:translateX(-50%)}}
+  .card{border:1px solid var(--border);border-radius:24px;
+    background:linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
+    padding:36px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
+  .card::before{content:"";position:absolute;inset:0;border-radius:24px;padding:1px;
+    background:linear-gradient(135deg, rgba(124,92,255,0.6), transparent 40%, rgba(0,229,255,0.5));
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+  .card-head{margin-bottom:26px}
+  .card-head h2{font-size:24px;font-weight:800;margin-bottom:6px}
+  .card-head p{color:var(--muted);font-size:14px}
+  .steps{display:flex;gap:8px;margin-bottom:28px;flex-wrap:wrap}
+  .step{flex:1;min-width:120px;padding:12px 14px;border-radius:12px;
+    border:1px solid var(--border);background:rgba(255,255,255,0.02);
+    display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);transition:.3s}
+  .step .n{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+    font-size:12px;font-weight:700;background:rgba(255,255,255,0.06);color:var(--muted);
+    font-family:'JetBrains Mono',monospace}
+  .step.active{border-color:rgba(124,92,255,0.5);background:rgba(124,92,255,0.08);color:#fff}
+  .step.active .n{background:var(--accent);color:#fff;box-shadow:0 0 16px rgba(124,92,255,0.6)}
+  .step.done{border-color:rgba(34,197,94,0.4);color:#86efac}
+  .step.done .n{background:var(--ok);color:#001b0c}
+  .field{margin-bottom:18px}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--muted);
+    letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;font-family:'JetBrains Mono',monospace}
+  .field input, .field textarea{width:100%;padding:15px 16px;background:rgba(0,0,0,0.35);
+    border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;
+    font-family:'Inter',sans-serif;outline:none;transition:.25s;resize:vertical}
+  .field textarea{min-height:96px;font-family:'JetBrains Mono',monospace;font-size:13px}
+  .field input:focus, .field textarea:focus{border-color:var(--accent);
+    box-shadow:0 0 0 4px rgba(124,92,255,0.15);background:rgba(0,0,0,0.5)}
+  .field input::placeholder, .field textarea::placeholder{color:#4a4a5c}
+  .btn{width:100%;padding:16px 20px;border-radius:12px;border:none;font-size:15px;
+    font-weight:700;font-family:'Inter',sans-serif;color:#fff;cursor:pointer;
+    position:relative;overflow:hidden;background:linear-gradient(135deg,var(--accent),#5b3ee0);
+    transition:.25s;letter-spacing:.3px}
+  .btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 12px 30px -8px rgba(124,92,255,0.7)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  .btn.ghost:hover:not(:disabled){border-color:var(--accent);background:rgba(124,92,255,0.08);box-shadow:none}
+  .btn-row{display:flex;gap:10px;margin-top:8px}
+  .btn-row .btn{margin-top:0}
+  .loader{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);
+    border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;
+    vertical-align:-3px;margin-right:8px}
+  .alert{padding:14px 16px;border-radius:12px;margin-top:16px;font-size:14px;
+    display:flex;gap:10px;align-items:flex-start;border:1px solid;line-height:1.5}
+  .alert.ok{background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.35);color:#86efac}
+  .alert.err{background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.35);color:#fca5a5}
+  .alert.info{background:rgba(124,92,255,0.08);border-color:rgba(124,92,255,0.35);color:#c4b5fd}
+  .result{display:none;margin-top:22px;border:1px solid rgba(34,197,94,0.35);
+    background:linear-gradient(180deg, rgba(34,197,94,0.08), rgba(34,197,94,0.02));
+    border-radius:16px;padding:22px}
+  .result.show{display:block;animation:fadeUp .5s ease}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  .result h4{font-size:16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;color:#86efac}
+  .result-row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;
+    border-bottom:1px dashed rgba(255,255,255,0.08);font-size:13px}
+  .result-row:last-child{border-bottom:none}
+  .result-row .k{color:var(--muted);font-family:'JetBrains Mono',monospace}
+  .result-row .v{font-family:'JetBrains Mono',monospace;word-break:break-all;text-align:right;max-width:60%}
+  .hidden{display:none !important}
+  footer{text-align:center;margin-top:60px;padding-top:26px;border-top:1px solid var(--border);
+    font-size:13px;color:var(--muted)}
+  footer b{color:var(--text)}
+  footer .credit{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1px;margin-top:8px;opacity:.7}
+  @media (max-width:640px){
+    .wrap{padding:16px 14px 60px}
+    .card{padding:24px 18px}
+    .brand-txt span{display:none}
+    .status-pill{font-size:11px;padding:6px 10px}
+    h1{letter-spacing:-.8px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">AM</div>
+      <div class="brand-txt">
+        <b>Am Prem</b>
+        <span>Alight Motion Premium</span>
+      </div>
+    </div>
+    <div class="status-pill">
+      <span class="dot"></span>
+      <span id="pillStatus">ONLINE V1.2.0</span>
+    </div>
+  </div>
 
-// ─── PILIH SALAH SATU ───
+  <section class="hero">
+    <div class="badge">⚡ <em>Server Production</em> · Anti-Replay · Rate Limit Cerdas</div>
+    <h1>ALIGHT MOTION<br><span class="g">PREMIUM GENERATOR</span></h1>
+    <p class="sub">Platform modern untuk automasi pengiriman tautan verifikasi dan otorisasi lisensi Alight Motion secara instan, aman, dan tanpa password.</p>
+  </section>
 
-// OPSI A — Kalau /api/verify bisa ditembak langsung dari browser:
-const API_SEND   = `${BASE_URL}/api/send-link`;
-const API_VERIFY = `${BASE_URL}/api/verify`;
-const API_STATS  = `${BASE_URL}/api/stats`;
+  <section class="features">
+    <div class="feat">
+      <div class="feat-icon">⚡</div>
+      <h3>Cepat &amp; Otomatis</h3>
+      <p>Pemrosesan token OOB dan otorisasi lisensi Alight Motion diselesaikan dalam hitungan detik secara realtime.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">🔒</div>
+      <h3>Tanpa Password</h3>
+      <p>Aman dan praktis. Anda tidak perlu memberikan password akun Anda untuk melakukan proses otorisasi lisensi.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">🛡️</div>
+      <h3>Server Production</h3>
+      <p>Backend berjalan di infrastruktur production dengan anti-replay dan rate limit cerdas.</p>
+    </div>
+  </section>
 
-// OPSI B — Kalau pakai backend Node sendiri (Playwright):
-// const API_SEND   = `/api/send-link`;
-// const API_VERIFY = `/api/verify`;
-// const API_STATS  = `/api/stats`;
+  <section class="stats">
+    <div class="stat"><div class="lbl">Total Akun Berhasil</div><div class="val" id="statTotal">300</div></div>
+    <div class="stat"><div class="lbl">Run Time Sistem</div><div class="val" id="statUptime">7 Hari 1 Jam</div></div>
+    <div class="stat"><div class="lbl">Status Platform</div><div class="val" id="statStatus">100% Online</div></div>
+  </section>
+
+  <div class="marquee">
+    <div class="marquee-track">
+      <span>TANPA PASSWORD</span><span>ANTI-REPLAY</span><span>RATE LIMIT CERDAS</span><span>SERVER PRODUCTION</span>
+      <span>TANPA PASSWORD</span><span>ANTI-REPLAY</span><span>RATE LIMIT CERDAS</span><span>SERVER PRODUCTION</span>
+    </div>
+  </div>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Generator Lisensi</h2>
+      <p>Ikuti 3 langkah berikut untuk mengaktifkan lisensi premium Alight Motion.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step active" id="stepTab1"><div class="n">1</div> Email</div>
+      <div class="step" id="stepTab2"><div class="n">2</div> Verifikasi</div>
+      <div class="step" id="stepTab3"><div class="n">3</div> Selesai</div>
+    </div>
+
+    <div id="panel1">
+      <div class="field">
+        <label for="email">Alamat Email</label>
+        <input type="email" id="email" placeholder="nama@email.com" autocomplete="email" spellcheck="false" />
+      </div>
+      <button class="btn" id="btnSend">KIRIM LINK VERIFIKASI</button>
+      <div id="alert1"></div>
+    </div>
+
+    <div id="panel2" class="hidden">
+      <div class="alert info" style="margin-bottom:18px">
+        <span>📩</span>
+        <div>Link verifikasi telah dikirim ke <b id="emailShow"></b>. Buka email Anda, salin <b>link / oobCode</b>, lalu tempel di bawah. <b>Jangan</b> buka link-nya di browser.</div>
+      </div>
+      <div class="field">
+        <label for="link">Link Verifikasi / OOB Code</label>
+        <textarea id="link" placeholder="Tempel link verifikasi atau oobCode di sini..."></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn ghost" id="btnBack" style="flex:0 0 130px">← KEMBALI</button>
+        <button class="btn" id="btnVerify">VERIFIKASI LISENSI</button>
+      </div>
+      <div id="alert2"></div>
+    </div>
+
+    <div class="result" id="result">
+      <h4>✅ Lisensi Berhasil Diaktifkan</h4>
+      <div id="resultBody"></div>
+      <button class="btn ghost" id="btnReset" style="margin-top:18px">PROSES AKUN LAIN</button>
+    </div>
+  </section>
+
+  <footer>
+    <div><b>Am Prem</b> — Alight Motion Premium Generator</div>
+    <div class="credit">© 2026 · KyzzAPIs · Server Production</div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const BASE_URL = "https://am.kyzzz.xyz";
+  const API_SEND   = `/api/send-link`;
+  const API_VERIFY = `/api/verify`;
+  const API_STATS  = `/api/stats`;
+  const HEADERS = {
+    "Content-Type": "application/json",
+    "Accept": "application/json"
+  };
+  const TIMEOUT = 30000;
+
+  const $ = (id) => document.getElementById(id);
+  const panel1 = $("panel1"), panel2 = $("panel2"), result = $("result"), resultBody = $("resultBody");
+  const emailInput = $("email"), linkInput = $("link"), emailShow = $("emailShow");
+  const btnSend = $("btnSend"), btnVerify = $("btnVerify"), btnBack = $("btnBack"), btnReset = $("btnReset");
+  const alert1 = $("alert1"), alert2 = $("alert2");
+  const stepTab1 = $("stepTab1"), stepTab2 = $("stepTab2"), stepTab3 = $("stepTab3");
+
+  let state = { email: "", link: "" };
+
+  const setAlert = (el, type, msg) => {
+    el.innerHTML = msg ? `<div class="alert ${type}"><span>${type==="ok"?"✅":type==="err"?"⚠️":"ℹ️"}</span><div>${msg}</div></div>` : "";
+  };
+  const loading = (btn, text) => {
+    btn.dataset.orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="loader"></span>${text}`;
+  };
+  const doneLoading = (btn) => {
+    btn.disabled = false;
+    btn.innerHTML = btn.dataset.orig;
+  };
+  const setStep = (n) => {
+    [stepTab1, stepTab2, stepTab3].forEach((t,i) => {
+      t.classList.toggle("active", i+1 === n);
+      t.classList.toggle("done", i+1 < n);
+    });
+  };
+  const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+  const fetchJSON = async (url, options = {}) => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), TIMEOUT);
+    try {
+      const res = await fetch(url, { ...options, signal: ctrl.signal });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      return { ok: res.ok, status: res.status, data };
+    } finally { clearTimeout(t); }
+  };
+
+  async function loadStats(){
+    try {
+      const { ok, data } = await fetchJSON(API_STATS, { headers: HEADERS });
+      if (ok && data) {
+        if (data.total) $("statTotal").textContent = data.total;
+        if (data.uptime) $("statUptime").textContent = data.uptime;
+        if (data.status) $("statStatus").textContent = data.status;
+      }
+    } catch {}
+  }
+
+  async function sendLink(){
+    setAlert(alert1, "", "");
+    const email = emailInput.value.trim().toLowerCase();
+    if (!email) return setAlert(alert1, "err", "Email tidak boleh kosong.");
+    if (!isEmail(email)) return setAlert(alert1, "err", "Format email tidak valid.");
+    loading(btnSend, "MENGIRIM...");
+    try {
+      const { ok, data, status } = await fetchJSON(API_SEND, {
+        method: "POST", headers: HEADERS, body: JSON.stringify({ email })
+      });
+      if (!ok || !data || (data.ok === false)) throw new Error(data?.error || `Server menolak (${status})`);
+      state.email = email;
+      emailShow.textContent = email;
+      setStep(2);
+      panel1.classList.add("hidden");
+      panel2.classList.remove("hidden");
+      setTimeout(() => linkInput.focus(), 200);
+    } catch (err) {
+      const m = err.name === "AbortError" ? "Request timeout. Coba lagi." : (err.message || "Gagal mengirim link.");
+      setAlert(alert1, "err", `Gagal: ${m}`);
+    } finally { doneLoading(btnSend); }
+  }
+
+  async function verify(){
+    setAlert(alert2, "", "");
+    const link = linkInput.value.trim();
+    if (!link) return setAlert(alert2, "err", "Link verifikasi tidak boleh kosong.");
+    loading(btnVerify, "MEMPROSES... (bisa 20-40 detik)");
+    try {
+      const { ok, data, status } = await fetchJSON(API_VERIFY, {
+        method: "POST", headers: HEADERS, body: JSON.stringify({ email: state.email, link })
+      });
+      if (!ok || !data || (data.ok === false)) throw new Error(data?.error || `Verifikasi gagal (${status})`);
+      state.link = link;
+      setStep(3);
+      panel2.classList.add("hidden");
+      renderResult(data);
+    } catch (err) {
+      const m = err.name === "AbortError" ? "Request timeout. Server mungkin sedang sibuk. Coba lagi." : (err.message || "Verifikasi gagal.");
+      setAlert(alert2, "err", `Gagal: ${m}`);
+    } finally { doneLoading(btnVerify); }
+  }
+
+  function renderResult(data){
+    const rows = [
+      ["Email", state.email],
+      ["Order ID", data.orderId || data.order_id || "-"],
+      ["UID", data.uid || "-"],
+      ["Status", data.message || data.status || "Aktif"],
+      ["Waktu", new Date().toLocaleString("id-ID")]
+    ];
+    resultBody.innerHTML = rows.map(([k,v]) =>
+      `<div class="result-row"><span class="k">${k}</span><span class="v">${escapeHTML(String(v))}</span></div>`
+    ).join("");
+    result.classList.add("show");
+    result.scrollIntoView({ behavior:"smooth", block:"center" });
+  }
+
+  function escapeHTML(s){
+    return s.replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+  }
+
+  function reset(){
+    state = { email: "", link: "" };
+    emailInput.value = ""; linkInput.value = "";
+    setAlert(alert1, "", ""); setAlert(alert2, "", "");
+    result.classList.remove("show");
+    panel2.classList.add("hidden");
+    panel1.classList.remove("hidden");
+    setStep(1);
+    emailInput.focus();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  btnSend.addEventListener("click", sendLink);
+  btnVerify.addEventListener("click", verify);
+  btnBack.addEventListener("click", () => {
+    setStep(1); panel2.classList.add("hidden"); panel1.classList.remove("hidden"); setAlert(alert2, "", "");
+  });
+  btnReset.addEventListener("click", reset);
+  emailInput.addEventListener("keydown", e => { if (e.key === "Enter") sendLink(); });
+  linkInput.addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) verify(); });
+
+  loadStats();
+  emailInput.focus();
+})();
+</script>
+</body>
+    </html>
