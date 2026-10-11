@@ -1,1 +1,0 @@
-# generator-am-vip
