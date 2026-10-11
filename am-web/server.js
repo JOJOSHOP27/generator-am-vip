@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const BASE_URL = 'https://am.kyzzz.xyz';
-const API_KEY  = 'AIzaSyDrZ9jr_Y16ltSBqsQR5IH6I04FRga6Ki0';
+const FALLBACK_API_KEY = process.env.AM_API_KEY || '';
+const DEFAULT_CONTINUE = 'https://alightcreative.com?ui_sid%3D0366624874%26ui_sd%3D0&lang=en';
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -22,86 +23,115 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-/**
- * Bangun URL final dari input apapun.
- * Menerima:
- *   - full URL
- *   - query string dengan apiKey
- *   - query string tanpa apiKey
- *   - oobCode doang
- */
+/* ─────── Bangun URL final dari input apapun ─────── */
 function buildFinalUrl(input) {
   const raw = (input || '').replace(/\s+/g, '').trim();
-  if (!raw) return null;
+  if (!raw) return { url: null, reason: 'input kosong' };
 
-  // 1) Full URL — pakai apa adanya
-  if (/^https?:\/\//i.test(raw)) return raw;
+  // Full URL — pakai apa adanya
+  if (/^https?:\/\//i.test(raw)) return { url: raw, reason: 'full url' };
 
-  // 2) Cari oobCode di input
+  // Cari oobCode
   let oobCode = null;
   const oobMatch = raw.match(/oobCode=([^&]+)/);
   if (oobMatch) oobCode = oobMatch[1];
 
-  // 3) Cari apiKey
-  let apiKey = API_KEY;
-  const apiMatch = raw.match(/apiKey=([^&]+)/);
-  if (apiMatch) apiKey = apiMatch[1];
-
-  // 4) Kalau tidak ada oobCode= tapi raw keliatan seperti token mentah
-  //    (tidak ada = dan panjang > 20) — anggap sebagai oobCode
+  // Kalau nggak ada oobCode=, cek token mentah (panjang > 20, tanpa =)
   if (!oobCode && !raw.includes('=') && raw.length > 20) {
     oobCode = raw;
   }
 
-  // 5) Kalau masih tidak ada oobCode, coba cari segmen panjang setelah "oobCode" atau sebelum "&continueUrl"
+  // Kalau masih nggak ada, coba ekstrak segmen panjang
   if (!oobCode) {
-    const tokenGuess = raw.match(/([A-Za-z0-9_\-]{30,})/);
-    if (tokenGuess) oobCode = tokenGuess[1];
+    const guess = raw.match(/([A-Za-z0-9_\-]{30,})/);
+    if (guess) oobCode = guess[1];
   }
 
-  if (!oobCode) return null;
+  if (!oobCode) return { url: null, reason: 'oobCode tidak ditemukan di input' };
 
-  // 6) Bangun URL final
-  return `https://alightcreative.com/auth_action/?apiKey=${apiKey}&mode=signIn&oobCode=${oobCode}&continueUrl=https://alightcreative.com?ui_sid%3D0366624874%26ui_sd%3D0&lang=en`;
+  // Cari apiKey dari input
+  let apiKey = null;
+  const apiMatch = raw.match(/apiKey=([^&]+)/);
+  if (apiMatch) apiKey = apiMatch[1];
+
+  // Fallback ke env kalau link kepotong
+  if (!apiKey) apiKey = FALLBACK_API_KEY;
+
+  if (!apiKey) {
+    return { url: null, reason: 'apiKey tidak ada di link dan AM_API_KEY env juga kosong' };
+  }
+
+  // Cari continueUrl dari input
+  let continueUrl = DEFAULT_CONTINUE;
+  const cMatch = raw.match(/continueUrl=([^&]+)/);
+  if (cMatch) continueUrl = decodeURIComponent(cMatch[1]);
+
+  const url = `https://alightcreative.com/auth_action/?apiKey=${apiKey}&mode=signIn&oobCode=${oobCode}&continueUrl=${continueUrl}`;
+  return { url, reason: 'reconstructed', apiKey, oobCode };
 }
 
+/* ─────── /api/send-link ─────── */
 app.post('/api/send-link', async (req, res) => {
   try {
     const { email } = req.body || {};
-    if (!email || !email.includes('@')) return res.status(400).json({ ok: false, error: 'Format email tidak valid' });
-    const { data } = await axios.post(`${BASE_URL}/api/send-link`, { email: email.trim().toLowerCase() }, { headers: HEADERS, timeout: 15000 });
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ ok: false, error: 'Format email tidak valid' });
+    }
+    const { data } = await axios.post(
+      `${BASE_URL}/api/send-link`,
+      { email: email.trim().toLowerCase() },
+      { headers: HEADERS, timeout: 15000 }
+    );
     return res.json(data);
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err.response?.data?.error || err.message || 'Gagal mengirim link' });
+    return res.status(500).json({
+      ok: false,
+      error: err.response?.data?.error || err.message || 'Gagal mengirim link'
+    });
   }
 });
 
+/* ─────── /api/verify ─────── */
 app.post('/api/verify', async (req, res) => {
   const { email, link } = req.body || {};
-  if (!email || !link) return res.status(400).json({ ok: false, error: 'Email dan link wajib diisi' });
+  if (!email || !link) {
+    return res.status(400).json({ ok: false, error: 'Email dan link wajib diisi' });
+  }
 
-  const finalUrl = buildFinalUrl(link);
-  console.log(`[AM] ============================================`);
-  console.log(`[AM] Input  : ${link.substring(0, 200)}`);
-  console.log(`[AM] Final  : ${finalUrl}`);
-  console.log(`[AM] ============================================`);
+  const built = buildFinalUrl(link);
+  console.log('═'.repeat(60));
+  console.log(`[AM] Email   : ${email}`);
+  console.log(`[AM] Input   : ${link.substring(0, 150)}${link.length > 150 ? '...' : ''}`);
+  console.log(`[AM] Length  : ${link.length} chars`);
+  console.log(`[AM] Reason  : ${built.reason}`);
+  console.log(`[AM] Final   : ${built.url ? built.url.substring(0, 150) + '...' : 'NULL'}`);
+  console.log('═'.repeat(60));
 
-  if (!finalUrl) {
-    return res.status(400).json({ ok: false, error: 'Tidak bisa membaca oobCode dari link yang kamu paste. Pastikan link dari email mengandung "oobCode=".' });
+  if (!built.url) {
+    return res.status(400).json({ ok: false, error: `Gagal parse link: ${built.reason}` });
   }
 
   try {
-    const result = await processAmKyzz({ email, finalUrl, headless: true });
-    if (!result.apiResult) return res.status(500).json({ ok: false, error: result.error || 'Tidak ada respons', tried: result.tried });
+    const result = await processAmKyzz({ email, finalUrl: built.url, headless: true });
+    if (!result.apiResult) {
+      return res.status(500).json({
+        ok: false,
+        error: result.error || 'Tidak ada respons dari server AM',
+        debug: result.debug
+      });
+    }
     return res.json(result.apiResult);
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
 
+/* ─────── /api/stats ─────── */
 app.get('/api/stats', async (req, res) => {
   try {
-    const { data } = await axios.get(`${BASE_URL}/api/stats`, { headers: HEADERS, timeout: 8000 }).catch(() => ({ data: null }));
+    const { data } = await axios.get(`${BASE_URL}/api/stats`, {
+      headers: HEADERS, timeout: 8000
+    }).catch(() => ({ data: null }));
     if (data) return res.json(data);
     return res.json({ total: '300', uptime: '7 Hari 1 Jam', status: '100% Online' });
   } catch {
@@ -109,12 +139,19 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
+/* ─────── Playwright automation ─────── */
 async function processAmKyzz({ email, finalUrl, headless = true }) {
-  console.log(`[AM] Start verify for ${email}`);
-
   const browser = await chromium.launch({
     headless,
-    args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--no-zygote','--single-process','--disable-blink-features=AutomationControlled']
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-zygote',
+      '--single-process',
+      '--disable-blink-features=AutomationControlled'
+    ]
   });
   console.log('[AM] Browser launched');
 
@@ -123,9 +160,10 @@ async function processAmKyzz({ email, finalUrl, headless = true }) {
     viewport: { width: 800, height: 600 }
   });
   const page = await context.newPage();
+
   await page.route('**/*', (route) => {
     const t = route.request().resourceType();
-    if (['image','media','font'].includes(t)) return route.abort();
+    if (['image', 'media', 'font'].includes(t)) return route.abort();
     return route.continue();
   });
 
@@ -145,19 +183,23 @@ async function processAmKyzz({ email, finalUrl, headless = true }) {
     console.log('[AM] LANJUT clicked');
     await page.waitForTimeout(2000);
 
-    const linkInput = page.locator("input[placeholder*='tautan'], textarea[placeholder*='tautan'], input[placeholder*='link'], input[type='text'], textarea").first();
+    const linkInput = page.locator(
+      "input[placeholder*='tautan'], textarea[placeholder*='tautan'], input[placeholder*='link'], input[type='text'], textarea"
+    ).first();
     await linkInput.waitFor({ state: 'visible', timeout: 15000 });
     await linkInput.click();
     await linkInput.fill('');
     await linkInput.type(finalUrl, { delay: 3 });
     await linkInput.evaluate((el) => {
-      ['input','change','keyup','blur'].forEach(ev => el.dispatchEvent(new Event(ev, { bubbles: true })));
+      ['input', 'change', 'keyup', 'blur'].forEach(ev =>
+        el.dispatchEvent(new Event(ev, { bubbles: true }))
+      );
     });
-    console.log('[AM] Link filled:', finalUrl.substring(0, 100));
+    console.log('[AM] Link typed');
 
-    // Cek tombol enabled, max 30 detik
     const verifyBtn = page.locator("button:has-text('VERIFIKASI')").first();
     const handle = await verifyBtn.elementHandle();
+
     let enabled = false;
     try {
       await page.waitForFunction((b) => b && !b.disabled, handle, { timeout: 30000 });
@@ -168,10 +210,16 @@ async function processAmKyzz({ email, finalUrl, headless = true }) {
     }
 
     if (!enabled) {
-      // Coba cek pesan error yang muncul di halaman
       const bodyText = await page.locator('body').innerText().catch(() => '');
-      console.log('[AM] Page body preview:', bodyText.substring(0, 500));
-      return { status: false, email, apiResult: null, error: 'Tombol VERIFIKASI tetap disabled. Cek apakah link expired atau server menolak.' };
+      const debug = bodyText.substring(0, 800);
+      console.log('[AM] Body preview:', debug);
+      return {
+        status: false,
+        email,
+        apiResult: null,
+        error: 'Tombol VERIFIKASI tetap disabled. Kemungkinan: link expired, oobCode tidak valid, atau halaman menampilkan pesan error.',
+        debug
+      };
     }
 
     let verifyResponse = null;
@@ -182,7 +230,7 @@ async function processAmKyzz({ email, finalUrl, headless = true }) {
     });
 
     await verifyBtn.click();
-    console.log('[AM] Verify clicked, waiting 10s...');
+    console.log('[AM] Verify clicked, waiting...');
     await page.waitForTimeout(10000);
 
     if (verifyResponse) {
@@ -190,7 +238,12 @@ async function processAmKyzz({ email, finalUrl, headless = true }) {
       return { status: verifyResponse.ok, email, apiResult: verifyResponse };
     }
 
-    return { status: false, email, apiResult: null, error: 'Klik verify terkirim tapi tidak ada respons.' };
+    return {
+      status: false,
+      email,
+      apiResult: null,
+      error: 'Klik verify terkirim tapi tidak ada respons dari server.'
+    };
   } catch (err) {
     console.error('[AM] Error:', err.message);
     throw err;
@@ -202,7 +255,7 @@ async function processAmKyzz({ email, finalUrl, headless = true }) {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log('═'.repeat(50));
+  console.log('═'.repeat(60));
   console.log(`  FORESTER WEB RUNNING on :${PORT}`);
-  console.log('═'.repeat(50));
+  console.log('═'.repeat(60));
 });
