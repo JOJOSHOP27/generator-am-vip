@@ -8,8 +8,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const BASE_URL = 'https://am.kyzzz.xyz';
-// apiKey ini fixed untuk semua link Alight Motion, dipakai sebagai fallback kalau user paste-nya kepotong
-const DEFAULT_API_KEY = 'AIzaSyDrZ9jr_Y16ltSBqsQR5IH6IO4FRga6Ki0';
+const API_KEY  = 'AIzaSyDrZ9jr_Y16ltSBqsQR5IH6I04FRga6Ki0';
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -23,52 +22,47 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-/* Bersihin input — hapus whitespace, newline, spasi liar */
-function cleanLink(input) {
-  return (input || '').replace(/\s+/g, '').trim();
-}
+/**
+ * Bangun URL final dari input apapun.
+ * Menerima:
+ *   - full URL
+ *   - query string dengan apiKey
+ *   - query string tanpa apiKey
+ *   - oobCode doang
+ */
+function buildFinalUrl(input) {
+  const raw = (input || '').replace(/\s+/g, '').trim();
+  if (!raw) return null;
 
-function normalizeLink(input) {
-  const raw = cleanLink(input);
-  if (!raw) return [];
-  console.log(`[AM] Raw input (${raw.length} chars):`, raw);
+  // 1) Full URL — pakai apa adanya
+  if (/^https?:\/\//i.test(raw)) return raw;
 
-  const variants = new Set();
-  const base = 'https://alightcreative.com/auth_action/?';
+  // 2) Cari oobCode di input
+  let oobCode = null;
+  const oobMatch = raw.match(/oobCode=([^&]+)/);
+  if (oobMatch) oobCode = oobMatch[1];
 
-  // Kalau input udah full URL
-  if (raw.startsWith('http')) {
-    variants.add(raw);
-    // versi tanpa &lang=
-    variants.add(raw.replace(/&lang=[^&]*/g, ''));
+  // 3) Cari apiKey
+  let apiKey = API_KEY;
+  const apiMatch = raw.match(/apiKey=([^&]+)/);
+  if (apiMatch) apiKey = apiMatch[1];
+
+  // 4) Kalau tidak ada oobCode= tapi raw keliatan seperti token mentah
+  //    (tidak ada = dan panjang > 20) — anggap sebagai oobCode
+  if (!oobCode && !raw.includes('=') && raw.length > 20) {
+    oobCode = raw;
   }
 
-  // Kalau input query string (mengandung oobCode=)
-  if (raw.includes('oobCode=') || raw.includes('apiKey=')) {
-    let qs = raw;
-    // Kalau ada double prefix, ambil query-nya aja
-    const qIdx = qs.indexOf('?');
-    if (qIdx !== -1 && qs.startsWith('http')) qs = qs.substring(qIdx + 1);
-
-    // Kalau apiKey hilang di depan, tambahin
-    if (!qs.startsWith('apiKey=')) {
-      qs = `apiKey=${DEFAULT_API_KEY}&` + qs.replace(/^[a-zA-Z0-9_\-]+&/, '');
-    }
-
-    variants.add(base + qs);
-    variants.add(base + qs.replace(/&lang=[^&]*/g, ''));
-    // versi tanpa continueUrl
-    variants.add(base + qs.replace(/&continueUrl=[^&]*/g, ''));
+  // 5) Kalau masih tidak ada oobCode, coba cari segmen panjang setelah "oobCode" atau sebelum "&continueUrl"
+  if (!oobCode) {
+    const tokenGuess = raw.match(/([A-Za-z0-9_\-]{30,})/);
+    if (tokenGuess) oobCode = tokenGuess[1];
   }
 
-  // Kalau cuma oobCode (kode murni tanpa = dan tanpa &)
-  if (!raw.includes('=') && !raw.startsWith('http') && raw.length > 20) {
-    const oobCode = raw;
-    variants.add(`${base}apiKey=${DEFAULT_API_KEY}&mode=signIn&oobCode=${oobCode}&continueUrl=https://alightcreative.com?lang=en`);
-    variants.add(`${base}apiKey=${DEFAULT_API_KEY}&mode=signIn&oobCode=${oobCode}`);
-  }
+  if (!oobCode) return null;
 
-  return Array.from(variants);
+  // 6) Bangun URL final
+  return `https://alightcreative.com/auth_action/?apiKey=${apiKey}&mode=signIn&oobCode=${oobCode}&continueUrl=https://alightcreative.com?ui_sid%3D0366624874%26ui_sd%3D0&lang=en`;
 }
 
 app.post('/api/send-link', async (req, res) => {
@@ -85,8 +79,19 @@ app.post('/api/send-link', async (req, res) => {
 app.post('/api/verify', async (req, res) => {
   const { email, link } = req.body || {};
   if (!email || !link) return res.status(400).json({ ok: false, error: 'Email dan link wajib diisi' });
+
+  const finalUrl = buildFinalUrl(link);
+  console.log(`[AM] ============================================`);
+  console.log(`[AM] Input  : ${link.substring(0, 200)}`);
+  console.log(`[AM] Final  : ${finalUrl}`);
+  console.log(`[AM] ============================================`);
+
+  if (!finalUrl) {
+    return res.status(400).json({ ok: false, error: 'Tidak bisa membaca oobCode dari link yang kamu paste. Pastikan link dari email mengandung "oobCode=".' });
+  }
+
   try {
-    const result = await processAmKyzz({ email, link, headless: true });
+    const result = await processAmKyzz({ email, finalUrl, headless: true });
     if (!result.apiResult) return res.status(500).json({ ok: false, error: result.error || 'Tidak ada respons', tried: result.tried });
     return res.json(result.apiResult);
   } catch (err) {
@@ -104,10 +109,8 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-async function processAmKyzz({ email, link, headless = true }) {
+async function processAmKyzz({ email, finalUrl, headless = true }) {
   console.log(`[AM] Start verify for ${email}`);
-  const variants = normalizeLink(link);
-  console.log(`[AM] ${variants.length} variants to try`);
 
   const browser = await chromium.launch({
     headless,
@@ -120,75 +123,77 @@ async function processAmKyzz({ email, link, headless = true }) {
     viewport: { width: 800, height: 600 }
   });
   const page = await context.newPage();
-
   await page.route('**/*', (route) => {
     const t = route.request().resourceType();
     if (['image','media','font'].includes(t)) return route.abort();
     return route.continue();
   });
 
-  const tried = [];
   try {
-    for (let i = 0; i < variants.length; i++) {
-      const variant = variants[i];
-      tried.push(variant);
-      console.log(`[AM] [${i+1}/${variants.length}] Trying: ${variant.substring(0, 120)}`);
-      try {
-        await page.goto(`${BASE_URL}/am`, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        await page.locator("input[type='email'], input[placeholder*='email']").first().fill(email.trim().toLowerCase());
-        await page.locator("button:has-text('KIRIM')").first().click();
+    console.log('[AM] Opening /am...');
+    await page.goto(`${BASE_URL}/am`, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
-        const lanjutBtn = page.locator("button:has-text('LANJUT KE VERIFIKASI')");
-        await lanjutBtn.waitFor({ state: 'visible', timeout: 20000 });
-        await lanjutBtn.click();
-        await page.waitForTimeout(1500);
+    await page.locator("input[type='email'], input[placeholder*='email']").first().fill(email.trim().toLowerCase());
+    console.log('[AM] Email filled');
 
-        const linkInput = page.locator("input[placeholder*='tautan'], textarea[placeholder*='tautan'], input[placeholder*='link'], input[type='text'], textarea").first();
-        await linkInput.waitFor({ state: 'visible', timeout: 15000 });
-        await linkInput.click();
-        await linkInput.fill('');
-        // Ketik manual biar trigger semua event listener (React/Vue butuh keydown)
-        await linkInput.type(variant, { delay: 5 });
-        // Dispatch event tambahan buat jaga-jaga
-        await linkInput.evaluate((el) => {
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-          el.dispatchEvent(new Event('change', { bubbles: true }));
-          el.dispatchEvent(new Event('keyup', { bubbles: true }));
-        });
-        console.log('[AM] Link filled + events dispatched');
+    await page.locator("button:has-text('KIRIM')").first().click();
+    console.log('[AM] KIRIM clicked');
 
-        const verifyBtn = page.locator("button:has-text('VERIFIKASI')").first();
-        const handle = await verifyBtn.elementHandle();
+    const lanjutBtn = page.locator("button:has-text('LANJUT KE VERIFIKASI')");
+    await lanjutBtn.waitFor({ state: 'visible', timeout: 25000 });
+    await lanjutBtn.click();
+    console.log('[AM] LANJUT clicked');
+    await page.waitForTimeout(2000);
 
-        // Cek 20 detik apakah tombol jadi enabled
-        let enabled = false;
-        try {
-          await page.waitForFunction((b) => b && !b.disabled, handle, { timeout: 20000 });
-          enabled = true;
-          console.log('[AM] ✓ Verify button ENABLED');
-        } catch {
-          console.log('[AM] ✗ Verify button STILL DISABLED');
-        }
+    const linkInput = page.locator("input[placeholder*='tautan'], textarea[placeholder*='tautan'], input[placeholder*='link'], input[type='text'], textarea").first();
+    await linkInput.waitFor({ state: 'visible', timeout: 15000 });
+    await linkInput.click();
+    await linkInput.fill('');
+    await linkInput.type(finalUrl, { delay: 3 });
+    await linkInput.evaluate((el) => {
+      ['input','change','keyup','blur'].forEach(ev => el.dispatchEvent(new Event(ev, { bubbles: true })));
+    });
+    console.log('[AM] Link filled:', finalUrl.substring(0, 100));
 
-        if (!enabled) continue;
-
-        let verifyResponse = null;
-        page.on('response', async (r) => {
-          if (r.url().includes('/api/verify')) { try { verifyResponse = await r.json(); } catch {} }
-        });
-        await verifyBtn.click();
-        await page.waitForTimeout(8000);
-
-        if (verifyResponse) {
-          console.log('[AM] SUCCESS:', JSON.stringify(verifyResponse));
-          return { status: verifyResponse.ok, email, apiResult: verifyResponse, tried };
-        }
-        console.log('[AM] No response captured, next variant...');
-      } catch (e) {
-        console.log(`[AM] Variant error: ${e.message}`);
-      }
+    // Cek tombol enabled, max 30 detik
+    const verifyBtn = page.locator("button:has-text('VERIFIKASI')").first();
+    const handle = await verifyBtn.elementHandle();
+    let enabled = false;
+    try {
+      await page.waitForFunction((b) => b && !b.disabled, handle, { timeout: 30000 });
+      enabled = true;
+      console.log('[AM] ✓ Verify button ENABLED');
+    } catch {
+      console.log('[AM] ✗ Verify button STILL DISABLED after 30s');
     }
-    return { status: false, email, apiResult: null, error: 'Semua format gagal. Coba: (1) copy ulang link LENGKAP dari email mulai dari "https://alightcreative.com/...", (2) kirim email verifikasi baru (link expired 1 jam), (3) pastikan tidak ada spasi/newline di link.', tried };
+
+    if (!enabled) {
+      // Coba cek pesan error yang muncul di halaman
+      const bodyText = await page.locator('body').innerText().catch(() => '');
+      console.log('[AM] Page body preview:', bodyText.substring(0, 500));
+      return { status: false, email, apiResult: null, error: 'Tombol VERIFIKASI tetap disabled. Cek apakah link expired atau server menolak.' };
+    }
+
+    let verifyResponse = null;
+    page.on('response', async (r) => {
+      if (r.url().includes('/api/verify')) {
+        try { verifyResponse = await r.json(); } catch {}
+      }
+    });
+
+    await verifyBtn.click();
+    console.log('[AM] Verify clicked, waiting 10s...');
+    await page.waitForTimeout(10000);
+
+    if (verifyResponse) {
+      console.log('[AM] ✓ Response:', JSON.stringify(verifyResponse));
+      return { status: verifyResponse.ok, email, apiResult: verifyResponse };
+    }
+
+    return { status: false, email, apiResult: null, error: 'Klik verify terkirim tapi tidak ada respons.' };
+  } catch (err) {
+    console.error('[AM] Error:', err.message);
+    throw err;
   } finally {
     await browser.close();
     console.log('[AM] Browser closed');
